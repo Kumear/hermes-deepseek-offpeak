@@ -8,9 +8,11 @@ price).
 
 The chip is the plugin: a green dot means cheap (off-peak or Chinese public holiday), red means
 expensive (peak). Hovering it shows the state, the price factor and the countdown to the next switch.
-Everything else is optional detail — clicking the chip opens a panel with the next switch, a 24-hour
-price timeline, the peak windows in your timezone and in UTC, and the holiday rules. The same panel is
-reachable from the command palette: ⌘K → `DeepSeek Peak: show/hide panel`.
+
+Everything else is optional detail — clicking the chip opens the panel (or use the command palette:
+⌘K → `DeepSeek Peak: show/hide panel`):
+
+<img src="docs/panel.png" alt="DeepSeek Peak panel: current state and price, next switch with countdown, local and UTC clock, 24-hour price timeline, peak windows in local time and UTC, holiday note" width="400">
 
 | Surface | Content |
 | --- | --- |
@@ -40,8 +42,8 @@ correct anywhere on the planet.
 ## Install
 
 ```bash
-git clone https://github.com/Kumear/deepseek-offpeak-plugin.git \
-  ~/.hermes/desktop-plugins/deepseek-offpeak-plugin
+git clone https://github.com/Kumear/hermes-deepseek-offpeak.git \
+  ~/.hermes/desktop-plugins/hermes-deepseek-offpeak
 ```
 
 Hermes loads desktop plugins from `~/.hermes/desktop-plugins/<name>/plugin.js` — plain ESM, no build
