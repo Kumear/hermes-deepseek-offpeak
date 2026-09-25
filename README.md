@@ -2,12 +2,20 @@
 
 A status-bar chip for the [Hermes desktop app](https://hermes-agent.nousresearch.com/docs) that shows
 whether the DeepSeek API is currently in **peak** hours (double price) or **off-peak** hours (half
-price), plus an optional detail panel.
+price).
+
+![status-bar chip: green dot and DS](docs/chip.png)
+
+The chip is the plugin: a green dot means cheap (off-peak or Chinese public holiday), red means
+expensive (peak). Hovering it shows the state, the price factor and the countdown to the next switch.
+Everything else is optional detail — clicking the chip opens a panel with the next switch, a 24-hour
+price timeline, the peak windows in your timezone and in UTC, and the holiday rules. The same panel is
+reachable from the command palette: ⌘K → `DeepSeek Peak: show/hide panel`.
 
 | Surface | Content |
 | --- | --- |
-| Status-bar chip | `DS` with a colored dot — green = off-peak (cheap), red = peak (expensive). Click toggles the panel; hovering shows state, price factor and the countdown to the next switch. |
-| Panel (on demand) | Current state and price, next switch (local time + countdown), 24-hour price timeline, peak windows in your local timezone and in UTC, holiday rules. |
+| Status-bar chip (the point) | `DS` + colored dot, always visible; the tooltip carries state, price factor and the one-second countdown to the next switch. |
+| Panel (optional) | Current state and price, next switch (local time + countdown), 24-hour price timeline, peak windows local and UTC, holiday rules. |
 | Command palette | `DeepSeek Peak: show/hide panel` (⌘K) |
 
 ## The rule
@@ -32,11 +40,14 @@ correct anywhere on the planet.
 ## Install
 
 ```bash
-git clone https://github.com/Kumear/deepseek-peak.git ~/.hermes/desktop-plugins/deepseek-peak
+git clone https://github.com/Kumear/deepseek-offpeak-plugin.git \
+  ~/.hermes/desktop-plugins/deepseek-offpeak-plugin
 ```
 
-Hermes loads desktop plugins from `~/.hermes/desktop-plugins/<name>/plugin.js`, plain ESM, no build
-step. Restart the app if the chip does not show up; after that the file is hot-reloaded on save.
+Hermes loads desktop plugins from `~/.hermes/desktop-plugins/<name>/plugin.js` — plain ESM, no build
+step, no dependencies (`@hermes/plugin-sdk` comes with the app). The folder name is free; the plugin
+identifies itself by the id inside the file. Restart the app if the chip does not show up; after that
+the file is hot-reloaded on save.
 
 ## Usage notes
 
