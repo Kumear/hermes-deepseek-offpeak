@@ -9,16 +9,16 @@ price).
 The chip is the plugin: a green dot means cheap (off-peak or Chinese public holiday), red means
 expensive (peak). Hovering it shows the state, the price factor and the countdown to the next switch.
 
-Everything else is optional detail — clicking the chip opens the panel (or use the command palette:
-⌘K → `DeepSeek Peak: show/hide panel`):
+Everything else is optional detail — clicking the chip opens the detail popover, and the command
+palette (⌘K → `DeepSeek Peak: status`) reports the same state as a notification:
 
 <img src="docs/panel.png" alt="DeepSeek Peak panel: current state and price, next switch with countdown, local and UTC clock, 24-hour price timeline, peak windows in local time and UTC, holiday note" width="400">
 
 | Surface | Content |
 | --- | --- |
 | Status-bar chip (the point) | `DS` + colored dot, always visible; the tooltip carries state, price factor and the one-second countdown to the next switch. |
-| Panel (optional) | Current state and price, next switch (local time + countdown), 24-hour price timeline, peak windows local and UTC, holiday rules. |
-| Command palette | `DeepSeek Peak: show/hide panel` (⌘K) |
+| Detail popover (click the chip) | Current state and price, next switch (local time + countdown), 24-hour price timeline, peak windows local and UTC, holiday rules. |
+| Command palette | `DeepSeek Peak: status` (⌘K) |
 
 ## The rule
 
@@ -70,18 +70,16 @@ the file is hot-reloaded on save.
 
 ## Usage notes
 
-- The chip is the always-on surface. The panel opens on a chip click or from the command palette and
-  closes without side effects — closing it never disables the plugin.
-- On desktop builds without `host.openWorkspace` the plugin falls back to a permanently docked pane.
-  Closing *that* pane disables the whole plugin (app-side behaviour): re-enable it under
-  **Settings → Plugins**.
-- The plugin id (`hermes-deepseek-offpeak`) is the plugin's identity — the app keys pane placement and its
-  enable/disable decision by it, so treat it as permanent once installed.
+- The chip is the only surface the plugin contributes, and the detail view is the chip's own popover:
+  nothing to dock, nothing to close, nothing that can switch the plugin off.
+- The plugin id (`hermes-deepseek-offpeak`) is the plugin's identity — the app keys its enable/disable
+  decision by it, so treat it as permanent once installed.
 
 ## Requirements
 
-A Hermes desktop build with the plugin SDK: contribution areas `statusBar.right`, `panes`, `palette`
-and a locale bundle registry. Developed and verified against Hermes desktop 0.21.5 on macOS.
+A Hermes desktop build with the plugin SDK: contribution areas `statusBar.right` and `palette`, the
+`Button`/`Popover` components and a locale bundle registry. No build step, no dependencies beyond the
+SDK the app ships. Developed and verified against Hermes desktop 0.21.5 on macOS.
 
 ## License
 

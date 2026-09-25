@@ -1,10 +1,10 @@
 /**
- * deepseek-peak — a Hermes desktop plugin.
+ * hermes-deepseek-offpeak — a Hermes desktop plugin.
  *
- * Shows in the desktop status bar whether the DeepSeek API is in peak hours
- * (double price) or off-peak hours (half price), plus an optional detail panel
- * with the next switch, a 24-hour price timeline and the peak windows in the
- * local timezone.
+ * The status bar gets a chip: a colored dot showing whether the DeepSeek API is
+ * in peak hours (double price) or off-peak hours (half price). Hover it for the
+ * one-line summary, click it for the detail popover — next switch, a 24-hour
+ * price timeline and the peak windows in the local timezone.
  *
  * RULE SOURCE: https://api-docs.deepseek.com/quick_start/pricing
  *   "Off-peak rates are half of the peak rates. Peak hours are
@@ -13,43 +13,43 @@
  *    including weekends and Chinese public holidays in full."
  *
  * HOLIDAYS: both peak windows sit inside 09:00-18:00 CST (UTC+8) on the same
- * calendar day they occupy in UTC, so a Chinese public holiday date can be
- * listed as its UTC calendar date. The State Council publishes the next year's
- * arrangement every November: 国务院办公厅 国办发明电〔2025〕7号 (for 2026)
- * https://www.gov.cn/zhengce/content/202511/content_7047090.htm
- *
- * CN_HOLIDAYS_UTC below is the offline fallback. On load the plugin refreshes
- * the list from a community mirror of that notice (`NateScarlet/holiday-cn` on
+ * calendar day they occupy in UTC, so a Chinese public holiday can be listed as
+ * its UTC calendar date. The State Council publishes the next year's
+ * arrangement every November: 国务院办公厅 国办发明电〔2025〕7号 (for 2026).
+ * CN_HOLIDAYS_UTC is the offline fallback — on load the plugin refreshes the
+ * list from a community mirror of that notice (`NateScarlet/holiday-cn` on
  * jsDelivr, one JSON GET per year), caches it for a week and silently keeps the
  * bundled dates when the network or the mirror fails. DeepSeek itself publishes
- * no API for peak/off-peak state or for the holiday calendar — the rule is text
- * on their pricing page, so this is as current as it gets.
+ * no API for the peak/off-peak state or the calendar — the rule is text on
+ * their pricing page, so this is as current as it gets.
  *
  * COLORS: green dot = cheap (off-peak or holiday), red dot = expensive (peak).
- *
- * CHIP + PANEL: the status-bar chip is the always-on surface. The panel is
- * optional and NOT permanently docked — clicking the chip (or ⌘K ->
- * "DeepSeek Peak: show/hide panel") opens it as a workspace tab next to the
- * chat, and closing it tears down the panel only: plugin and chip stay enabled.
- * Reason: a permanently registered single pane is a trap — closing it makes the
- * app disable the WHOLE plugin (see the ID note below).
+ * The dot carries the state; the chip text stays neutral so color is the only
+ * thing that changes.
  *
  * PORTABLE BY DESIGN: all state math runs in UTC and every displayed time is
  * derived from the device timezone, so the same plugin is correct in any
  * timezone. Display strings live in the single `en` bundle — the plugin i18n
  * resolver falls back to `en` for every other app locale.
+ *
+ * ID: the app keys its "plugin disabled" state by this id, so treat it as
+ * permanent once shipped. It matches the repository name on purpose.
  */
-
-import { cn, haptic, host, PALETTE_AREA, Tip, usePluginI18n } from '@hermes/plugin-sdk'
+import {
+  Button,
+  cn,
+  haptic,
+  host,
+  PALETTE_AREA,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  STATUSBAR_AREAS,
+  usePluginI18n
+} from '@hermes/plugin-sdk'
 import { jsx, jsxs } from 'react/jsx-runtime'
 import { useEffect, useState } from 'react'
 
-// The module id is the plugin's identity: the app keys pane placement and its
-// "plugin disabled" decision (`hermes.desktop.pluginDecisions.v2`) by it, and it
-// gives the plugin a fresh state whenever it changes. A rename makes the app
-// treat the plugin as brand new — that is the escape hatch for a stuck
-// "disabled" entry, but it also orphans the old pane and decision, so treat the
-// id as permanent once shipped. It matches the repository name on purpose.
 const ID = 'hermes-deepseek-offpeak'
 
 // Status colors: the skin's variables when present, with fixed fallbacks.
@@ -61,7 +61,8 @@ const DATE_LOCALE = 'en-GB'
 // ---- logic start (pure, no imports — unit-testable) ------------------------
 // Peak windows as [start, end) in minutes since 00:00 UTC.
 const PEAK_WINDOWS_UTC = [[60, 240], [360, 600]]
-const BOUNDARY_HOURS = [1, 4, 6, 10] // UTC hours at which the price changes
+// UTC hours at which the price can change — derived, so there is one source.
+const BOUNDARY_HOURS = PEAK_WINDOWS_UTC.flat().map(minutes => minutes / 60)
 
 // Chinese public holidays that fall on a weekday (weekends are off-peak
 // anyway). Format YYYY-MM-DD, UTC calendar == CST calendar for these dates.
@@ -183,6 +184,17 @@ function holidaySourceText(now) {
   )
 }
 
+// The one-line status text used by the chip's hover hint and the ⌘K toast.
+function summaryFor(t, now) {
+  const left = fmtDuration(nextTransition(now) - now.getTime())
+  const state = peakState(now)
+  return state === 'peak'
+    ? t('chipTipPeak', left)
+    : state === 'holiday'
+      ? t('chipTipHoliday', left)
+      : t('chipTipOff', left)
+}
+
 function tzOffsetMinutes() {
   return -new Date().getTimezoneOffset()
 }
@@ -229,7 +241,6 @@ function clock(d, timeZone) {
   return new Intl.DateTimeFormat(DATE_LOCALE, {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     timeZone
   }).format(d)
 }
@@ -300,55 +311,19 @@ function Timeline({ now }) {
   })
 }
 
-function DeepSeekChip() {
-  const t = usePluginI18n(ID)
-  const now = useNow(1000)
+/** Detail view, shown in the chip's popover (click). `now` comes from the chip,
+ *  so one timer drives both. */
+function DetailPanel({ now, t }) {
   const state = peakState(now)
+  const isPeakNow = state === 'peak'
   const next = nextTransition(now)
   const left = fmtDuration(next - now.getTime())
-  const isPeakNow = state === 'peak'
-
-  return jsx(Tip, {
-    label:
-      (isPeakNow ? t('chipTipPeak', left) : state === 'holiday' ? t('chipTipHoliday', left) : t('chipTipOff', left)) +
-      ' · ' +
-      t('panelHint'),
-    children: jsxs('button', {
-      type: 'button',
-      onClick: () => {
-        haptic('tap')
-        togglePanel()
-      },
-      className: cn(
-        'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] transition-colors',
-        'hover:bg-(--chrome-action-hover)'
-      ),
-      children: [
-        jsx(Dot, { key: 'dot', cheap: !isPeakNow }),
-        jsx('span', {
-          key: 'v',
-          className: 'font-medium',
-          children: t('chip')
-        })
-      ]
-    })
-  })
-}
-
-function DeepSeekPane() {
-  const t = usePluginI18n(ID)
-  const now = useNow(1000)
-  const state = peakState(now)
-  const next = nextTransition(now)
-  const left = fmtDuration(next - now.getTime())
-  const isPeakNow = state === 'peak'
   const color = isPeakNow ? COLOR_PEAK : COLOR_OFF
-
   const w = PEAK_WINDOWS_UTC
   const stateText = isPeakNow ? t('statePeak') : state === 'holiday' ? t('stateHoliday') : t('stateOff')
 
   return jsxs('div', {
-    className: 'flex h-full flex-col gap-3 overflow-auto p-3 text-sm',
+    className: 'flex flex-col gap-3 text-xs',
     children: [
       jsxs('div', {
         className: 'flex items-center gap-2',
@@ -409,6 +384,40 @@ function DeepSeekPane() {
             ]
           })
         ]
+      })
+    ]
+  })
+}
+
+/** Status-bar chip: colored dot + neutral label, wrapped in the popover. */
+function DeepSeekChip() {
+  const t = usePluginI18n(ID)
+  const now = useNow(1000)
+  const isPeakNow = peakState(now) === 'peak'
+  const summary = summaryFor(t, now)
+
+  return jsxs(Popover, {
+    children: [
+      jsx(PopoverTrigger, {
+        asChild: true,
+        children: jsxs(Button, {
+          'aria-label': summary,
+          title: summary + ' · ' + t('clickHint'),
+          variant: 'ghost',
+          size: 'micro',
+          className: cn('gap-1.5 px-1.5'),
+          onClick: () => haptic('tap'),
+          children: [
+            jsx(Dot, { key: 'dot', cheap: !isPeakNow }),
+            jsx('span', { key: 'label', className: 'font-medium', children: t('chip') })
+          ]
+        })
+      }),
+      jsx(PopoverContent, {
+        align: 'end',
+        side: 'top',
+        className: 'w-[19.5rem] p-3',
+        children: jsx(DetailPanel, { now, t })
       })
     ]
   })
@@ -505,52 +514,6 @@ async function refreshHolidays(ctx) {
   }
 }
 
-// ---- panel on demand (not permanently docked) ------------------------------
-// A permanently registered single pane is a trap: when the user closes it, the
-// app disables the WHOLE plugin — chip included. So the chip click opens an
-// openWorkspace panel instead: openWorkspace attaches its own pane closer, so
-// closing the tab tears down the panel only.
-const PANEL_KEY = 'hermes-deepseek-offpeak-panel'
-const PANEL_MIN_WIDTH = '15.5rem' // ≈ 248 px, the width the old pane had
-
-/** Disposer of the open panel; null = closed. */
-let panelClose = null
-
-function panelSupported() {
-  return typeof host.openWorkspace === 'function'
-}
-
-function togglePanel() {
-  if (panelClose) {
-    const close = panelClose
-
-    panelClose = null
-    close()
-
-    return
-  }
-
-  if (!panelSupported()) {
-    return
-  }
-
-  try {
-    panelClose = host.openWorkspace(PANEL_KEY, {
-      render: () => jsx(DeepSeekPane, {}),
-      title: 'DeepSeek Peak',
-      // Dock to the right of the chat — like the former placement: 'right'.
-      dock: { pane: 'workspace', pos: 'right' },
-      minWidth: PANEL_MIN_WIDTH,
-      onClose: () => {
-        panelClose = null
-      }
-    })
-  } catch (error) {
-    panelClose = null
-    host.notify({ kind: 'error', message: 'DeepSeek Peak panel: ' + String(error) })
-  }
-}
-
 export default {
   id: ID,
   name: 'DeepSeek Peak',
@@ -561,7 +524,7 @@ export default {
         chipTipPeak: left => `DeepSeek PEAK — double price. Off-peak in ${left}`,
         chipTipOff: left => `DeepSeek off-peak — half price. Peak in ${left}`,
         chipTipHoliday: left => `DeepSeek off-peak (Chinese public holiday) — half price. Peak in ${left}`,
-        panelHint: 'click opens/closes the panel',
+        clickHint: 'click for details',
         statePeak: 'Peak — expensive',
         stateOff: 'Off-peak — cheap',
         stateHoliday: 'Off-peak — Chinese holiday',
@@ -580,7 +543,7 @@ export default {
         holidays: 'Chinese holidays',
         alwaysOff: 'off-peak all day',
         days: n => n + ' days',
-        panelCommand: 'DeepSeek Peak: show/hide panel',
+        statusCommand: 'DeepSeek Peak: status',
         source: info => 'api-docs.deepseek.com · holidays: ' + info
       }
     })
@@ -589,39 +552,33 @@ export default {
     // the background and swaps in when it lands (never blocks the first paint).
     refreshHolidays(ctx)
 
-    // No permanently docked pane: it opens on a chip click (openWorkspace, see
-    // togglePanel). Only older desktop builds without openWorkspace still get
-    // the classic registered pane.
-    if (!panelSupported()) {
-      ctx.register({
-        id: 'pane',
-        area: 'panes',
-        title: 'DeepSeek Peak',
-        data: { placement: 'right', width: '248px' },
-        render: () => jsx(DeepSeekPane, {})
-      })
-    }
-
-    // Palette (⌘K) row. Its label is read at registration time, where a hook
-    // cannot reach it: use ctx.i18n.t when the build offers it (newer builds
-    // only) and fall back to the English literal.
+    // ⌘K row. Registration runs outside a component, so the label cannot use the
+    // i18n hook: ctx.i18n.t resolves it (English literal as the last resort).
+    const t0 = typeof (ctx.i18n && ctx.i18n.t) === 'function' ? (key, arg) => ctx.i18n.t(key, arg) : null
     ctx.register({
-      id: 'panel-command',
+      id: 'status',
       area: PALETTE_AREA,
       data: {
-        id: 'hermes-deepseek-offpeak.panel',
-        label:
-          typeof (ctx.i18n && ctx.i18n.t) === 'function'
-            ? ctx.i18n.t('panelCommand')
-            : 'DeepSeek Peak: show/hide panel',
-        keywords: ['deepseek', 'peak', 'off-peak', 'panel'],
-        run: () => togglePanel()
+        id: 'hermes-deepseek-offpeak.status',
+        label: t0 ? t0('statusCommand') : 'DeepSeek Peak: status',
+        keywords: ['deepseek', 'peak', 'off-peak', 'price', 'status'],
+        run: () => {
+          const now = new Date()
+
+          haptic('tap')
+          host.notify({
+            kind: 'info',
+            message: t0 ? summaryFor(t0, now) : 'DeepSeek peak/off-peak status: ' + fmtDuration(nextTransition(now) - now.getTime())
+          })
+        }
       }
     })
 
+    // The chip: dot + label, detail view in its popover — no pane, so closing
+    // the detail view can never disable the plugin itself.
     ctx.register({
       id: 'chip',
-      area: 'statusBar.right',
+      area: STATUSBAR_AREAS.right,
       order: 135,
       render: () => jsx(DeepSeekChip, {})
     })
