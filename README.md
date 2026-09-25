@@ -58,7 +58,7 @@ the file is hot-reloaded on save.
 - On desktop builds without `host.openWorkspace` the plugin falls back to a permanently docked pane.
   Closing *that* pane disables the whole plugin (app-side behaviour): re-enable it under
   **Settings → Plugins**.
-- The plugin id (`deepseek-peak-v2`) is the plugin's identity — the app keys pane placement and its
+- The plugin id (`hermes-deepseek-offpeak`) is the plugin's identity — the app keys pane placement and its
   enable/disable decision by it, so treat it as permanent once installed.
 
 ## Requirements

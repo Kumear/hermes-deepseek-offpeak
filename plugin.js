@@ -39,12 +39,12 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 import { useEffect, useState } from 'react'
 
 // The module id is the plugin's identity: the app keys pane placement and its
-// "plugin disabled" decision (`hermes.desktop.pluginDecisions.v2`) by it. A
-// rename makes the app treat the plugin as brand new — that is the escape hatch
-// for a stuck "disabled" entry, but it also orphans the old pane and decision,
-// so treat the id as permanent once shipped. The -v2 suffix is such a rename:
-// never renumber it again.
-const ID = 'deepseek-peak-v2'
+// "plugin disabled" decision (`hermes.desktop.pluginDecisions.v2`) by it, and it
+// gives the plugin a fresh state whenever it changes. A rename makes the app
+// treat the plugin as brand new — that is the escape hatch for a stuck
+// "disabled" entry, but it also orphans the old pane and decision, so treat the
+// id as permanent once shipped. It matches the repository name on purpose.
+const ID = 'hermes-deepseek-offpeak'
 
 // Status colors: the skin's variables when present, with fixed fallbacks.
 const COLOR_OFF = 'var(--ui-success, #3fb950)' // cheap
@@ -383,7 +383,7 @@ function DeepSeekPane() {
 // app disables the WHOLE plugin — chip included. So the chip click opens an
 // openWorkspace panel instead: openWorkspace attaches its own pane closer, so
 // closing the tab tears down the panel only.
-const PANEL_KEY = 'deepseek-peak-panel'
+const PANEL_KEY = 'hermes-deepseek-offpeak-panel'
 const PANEL_MIN_WIDTH = '15.5rem' // ≈ 248 px, the width the old pane had
 
 /** Disposer of the open panel; null = closed. */
@@ -478,7 +478,7 @@ export default {
       id: 'panel-command',
       area: PALETTE_AREA,
       data: {
-        id: 'deepseek-peak.panel',
+        id: 'hermes-deepseek-offpeak.panel',
         label:
           typeof (ctx.i18n && ctx.i18n.t) === 'function'
             ? ctx.i18n.t('panelCommand')
