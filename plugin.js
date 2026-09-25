@@ -14,10 +14,16 @@
  *
  * HOLIDAYS: both peak windows sit inside 09:00-18:00 CST (UTC+8) on the same
  * calendar day they occupy in UTC, so a Chinese public holiday date can be
- * listed as its UTC calendar date. Source (re-published every year):
- * 国务院办公厅 国办发明电〔2025〕7号
+ * listed as its UTC calendar date. The State Council publishes the next year's
+ * arrangement every November: 国务院办公厅 国办发明电〔2025〕7号 (for 2026)
  * https://www.gov.cn/zhengce/content/202511/content_7047090.htm
- * Extend CN_HOLIDAYS_UTC when the next year's list appears.
+ *
+ * CN_HOLIDAYS_UTC below is the offline fallback. On load the plugin refreshes
+ * the list from a community mirror of that notice (`NateScarlet/holiday-cn` on
+ * jsDelivr, one JSON GET per year), caches it for a week and silently keeps the
+ * bundled dates when the network or the mirror fails. DeepSeek itself publishes
+ * no API for peak/off-peak state or for the holiday calendar — the rule is text
+ * on their pricing page, so this is as current as it gets.
  *
  * COLORS: green dot = cheap (off-peak or holiday), red dot = expensive (peak).
  *
@@ -81,6 +87,12 @@ const CN_HOLIDAYS_UTC = new Set([
   '2026-10-07' // National Day (Wed)
 ])
 
+// Active holiday set: the bundled list until a live refresh replaces it (see
+// refreshHolidays). Only weekday holidays live in here — weekends are off-peak
+// anyway, and tagging them "holiday" would misattribute the state.
+let cnHolidays = CN_HOLIDAYS_UTC
+let holidaySource = { live: false, years: [], fetchedAt: null, error: null }
+
 const p2 = n => String(n).padStart(2, '0')
 
 function isoDateUTC(d) {
@@ -88,7 +100,7 @@ function isoDateUTC(d) {
 }
 
 function isCnHoliday(d) {
-  return CN_HOLIDAYS_UTC.has(isoDateUTC(d))
+  return cnHolidays.has(isoDateUTC(d))
 }
 
 /** 'peak' | 'off' | 'holiday' */
@@ -108,7 +120,7 @@ function isPeak(d) {
 // in so nothing hardcoded lives down here.
 function holidaySummary(fmtDays) {
   const perYear = {}
-  for (const iso of CN_HOLIDAYS_UTC) {
+  for (const iso of cnHolidays) {
     const y = iso.slice(0, 4)
     perYear[y] = (perYear[y] || 0) + 1
   }
@@ -145,6 +157,30 @@ function fmtDuration(ms) {
   const m = Math.floor(s / 60)
   s -= m * 60
   return (d > 0 ? d + 'd ' : '') + p2(h) + ':' + p2(m) + ':' + p2(s)
+}
+
+// "3h ago" / "2d ago" for the age of the holiday data.
+function agoText(ts, now) {
+  if (!(now - ts >= 60000)) return 'just now'
+  const h = Math.floor((now - ts) / 3600000)
+  return h < 48 ? h + 'h ago' : Math.floor(h / 24) + 'd ago'
+}
+
+// Provenance line under the panel's holiday rows: live mirror, bundled fallback
+// or a failed refresh — never a guess.
+function holidaySourceText(now) {
+  if (holidaySource.live) {
+    return (
+      'gov.cn via holiday-cn · live ' +
+      holidaySource.years.join('+') +
+      ' · updated ' +
+      agoText(holidaySource.fetchedAt, now)
+    )
+  }
+  const years = [...new Set([...cnHolidays].map(iso => iso.slice(0, 4)))].sort().join('+')
+  return (
+    'gov.cn notice ' + years + ' (bundled)' + (holidaySource.error ? ' · live refresh failed' : ' · refreshing…')
+  )
 }
 
 function tzOffsetMinutes() {
@@ -368,7 +404,7 @@ function DeepSeekPane() {
               jsx(Row, { label: t('holidays'), value: holidaySummary(n => t('days', n)) + ' — ' + t('alwaysOff') }),
               jsx('div', {
                 className: 'mt-1 text-[0.6875rem] leading-snug text-(--ui-text-quaternary)',
-                children: t('source')
+                children: t('source', holidaySourceText(now.getTime()))
               })
             ]
           })
@@ -376,6 +412,97 @@ function DeepSeekPane() {
       })
     ]
   })
+}
+
+// ---- live holiday list (bundled list above stays the fallback) -------------
+const HOLIDAY_REFRESH_MS = 7 * 24 * 3600 * 1000
+const HOLIDAY_CACHE_KEY = 'holidays.v1'
+/** Community mirror of the State Council notice, one JSON per year. */
+const holidayUrls = year => [
+  `https://cdn.jsdelivr.net/gh/NateScarlet/holiday-cn@master/${year}.json`,
+  `https://fastly.jsdelivr.net/gh/NateScarlet/holiday-cn@master/${year}.json`
+]
+
+function isWeekendIso(iso) {
+  const day = new Date(iso + 'T00:00:00Z').getUTCDay()
+  return day === 0 || day === 6
+}
+
+/** Weekday holidays of one year, or [] while that year is not published yet. */
+async function fetchHolidayYear(year) {
+  for (const url of holidayUrls(year)) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
+
+      if (!res.ok) continue
+
+      const data = await res.json()
+      const days = (Array.isArray(data && data.days) ? data.days : [])
+        .filter(d => d && d.isOffDay === true && typeof d.date === 'string')
+        .map(d => d.date)
+        .filter(iso => !isWeekendIso(iso))
+
+      if (days.length) return days
+    } catch (error) {
+      // mirror down — the next mirror, or the bundled list, takes over
+    }
+  }
+
+  return []
+}
+
+function applyHolidays(days, meta) {
+  if (!days.length) return
+
+  cnHolidays = new Set(days)
+  holidaySource = meta
+}
+
+/**
+ * Refresh from the mirror when the cache is stale. Never throws: on any failure
+ * the bundled list (or the last good cache) stays in place and the panel's
+ * provenance line says so.
+ */
+async function refreshHolidays(ctx) {
+  try {
+    const cache = ctx.storage.get(HOLIDAY_CACHE_KEY, null)
+
+    if (cache && Array.isArray(cache.days) && Date.now() - cache.fetchedAt < HOLIDAY_REFRESH_MS) {
+      applyHolidays(cache.days, { live: true, years: cache.years, fetchedAt: cache.fetchedAt, error: null })
+      return true
+    }
+
+    const year = new Date().getUTCFullYear()
+    const days = []
+    const years = []
+
+    for (const y of [year, year + 1]) {
+      const part = await fetchHolidayYear(y)
+
+      if (part.length) {
+        days.push(...part)
+        years.push(y)
+      }
+    }
+
+    if (!days.length) throw new Error('no holiday data reachable')
+
+    // Live data is authoritative per year; the bundled list fills the gaps.
+    const covered = new Set(years.map(String))
+    const kept = [...CN_HOLIDAYS_UTC].filter(iso => !covered.has(iso.slice(0, 4)))
+    const meta = { live: true, years: years.map(String), fetchedAt: Date.now(), error: null }
+
+    applyHolidays([...kept, ...days], meta)
+    ctx.storage.set(HOLIDAY_CACHE_KEY, { days, years: meta.years, fetchedAt: meta.fetchedAt })
+    console.log(`[${ID}] holidays: live ${meta.years.join('+')} (${days.length} weekday holidays)`)
+
+    return true
+  } catch (error) {
+    holidaySource = { ...holidaySource, error: String(error) }
+    console.warn(`[${ID}] holidays: live refresh failed (${String(error)}) — keeping bundled/cached list`)
+
+    return false
+  }
 }
 
 // ---- panel on demand (not permanently docked) ------------------------------
@@ -454,9 +581,13 @@ export default {
         alwaysOff: 'off-peak all day',
         days: n => n + ' days',
         panelCommand: 'DeepSeek Peak: show/hide panel',
-        source: 'api-docs.deepseek.com · holidays: gov.cn (国办发明电〔2025〕7号)'
+        source: info => 'api-docs.deepseek.com · holidays: ' + info
       }
     })
+
+    // Holiday list: bundled data renders immediately, live data is fetched in
+    // the background and swaps in when it lands (never blocks the first paint).
+    refreshHolidays(ctx)
 
     // No permanently docked pane: it opens on a chip click (openWorkspace, see
     // togglePanel). Only older desktop builds without openWorkspace still get

@@ -33,6 +33,23 @@ a Chinese public holiday can be listed as its UTC calendar date (`CN_HOLIDAYS_UT
 from the State Council's annual notice (2026: 国办发明电〔2025〕7号, see the link in the file header)
 and has to be extended once a year.
 
+## Holiday data stays current
+
+DeepSeek publishes **no API** for peak/off-peak state or for the holiday calendar — the rule is text
+on their pricing page. The Chinese holiday arrangement is re-published once a year (State Council,
+every November), so instead of hardcoding it the plugin:
+
+- ships the current list (`CN_HOLIDAYS_UTC`) as an offline fallback,
+- refreshes it from a community mirror of that notice
+  ([`NateScarlet/holiday-cn`](https://github.com/NateScarlet/holiday-cn), served via jsDelivr) — one
+  JSON GET per year, at most once a week, cached locally,
+- keeps the bundled dates whenever the network or the mirror fails, and
+- names its source in the panel footer: `live 2026 · updated 3h ago` vs.
+  `notice 2026 (bundled) · live refresh failed`.
+
+Nothing is sent anywhere — the refresh is an anonymous GET to a public CDN. As soon as the State
+Council publishes the next year's arrangement, it appears automatically: no plugin update needed.
+
 ## Timezones
 
 All state math runs in UTC; every displayed time is rendered in the timezone of the machine the app
