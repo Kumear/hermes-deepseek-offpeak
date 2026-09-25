@@ -12,7 +12,9 @@ expensive (peak). Hovering it shows the state, the price factor and the countdow
 Everything else is optional detail — clicking the chip opens the detail popover, and the command
 palette (⌘K → `DeepSeek Peak: status`) reports the same state as a notification:
 
-<img src="docs/panel.png" alt="DeepSeek Peak panel: current state and price, next switch with countdown, local and UTC clock, 24-hour price timeline, peak windows in local time and UTC, holiday note" width="400">
+<img src="docs/panel.png" alt="The chip with its detail popover open above it: current state and price, next switch with countdown, local and UTC clock, 24-hour price timeline, peak windows in local time and UTC, holiday note" width="520">
+
+*The chip with its detail popover open above it — on a Chinese public holiday, so off-peak all day.*
 
 | Surface | Content |
 | --- | --- |
