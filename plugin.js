@@ -403,6 +403,9 @@ const holidayUrls = year => [
   `https://fastly.jsdelivr.net/gh/NateScarlet/holiday-cn@master/${year}.json`
 ]
 
+/** Remote data is treated as untrusted input: dates only, no surprises. */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
 function isWeekendIso(iso) {
   const day = new Date(iso + 'T00:00:00Z').getUTCDay()
   return day === 0 || day === 6
@@ -412,15 +415,21 @@ function isWeekendIso(iso) {
 async function fetchHolidayYear(year) {
   for (const url of holidayUrls(year)) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(15000),
+        // Public data, nothing about the user goes out: no cookies, no referrer.
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer'
+      })
 
       if (!res.ok) continue
 
       const data = await res.json()
       const days = (Array.isArray(data && data.days) ? data.days : [])
-        .filter(d => d && d.isOffDay === true && typeof d.date === 'string')
+        .filter(d => d && d.isOffDay === true && ISO_DATE.test(String((d && d.date) || '')))
         .map(d => d.date)
         .filter(iso => !isWeekendIso(iso))
+        .slice(0, 366)
 
       if (days.length) return days
     } catch (error) {

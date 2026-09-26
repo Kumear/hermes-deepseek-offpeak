@@ -51,6 +51,22 @@ every November), so instead of hardcoding it the plugin:
 Nothing is sent anywhere — the refresh is an anonymous GET to a public CDN. As soon as the State
 Council publishes the next year's arrangement, it appears automatically: no plugin update needed.
 
+## Privacy & safety
+
+- **Nothing about you is sent anywhere.** The plugin's only network request is an anonymous `GET` for
+  a public JSON file (the holiday list) from a CDN — no cookies, no referrer, no API key, no account,
+  no telemetry, no usage data. The CDN sees an IP address and which public file was requested, that is
+  all. `fetch` is called with `credentials: 'omit'` and `referrerPolicy: 'no-referrer'`.
+- It reads the clock and the timezone offset — nothing else from the app: no sessions, no messages, no
+  model, no profile, no account state.
+- Locally it stores exactly one value in the app's plugin storage: the cached holiday list
+  (`{ days, years, fetchedAt }` — public data).
+- **Trust model:** the holiday list comes from a community mirror of the State Council notice, so it is
+  treated as untrusted input (shape-validated: `YYYY-MM-DD` only, capped at 366 entries). If it were
+  ever wrong or unavailable, the worst case is a wrong off-peak/peak *display* on a Chinese holiday —
+  no code is executed from it, and the bundled list is the fallback.
+- No build step, no dependencies, no postinstall scripts: one file, `plugin.js`.
+
 ## Timezones
 
 All state math runs in UTC; every displayed time is rendered in the timezone of the machine the app
