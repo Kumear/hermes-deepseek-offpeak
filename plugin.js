@@ -92,7 +92,6 @@ const CN_HOLIDAYS_UTC = new Set([
 // refreshHolidays). Only weekday holidays live in here — weekends are off-peak
 // anyway, and tagging them "holiday" would misattribute the state.
 let cnHolidays = CN_HOLIDAYS_UTC
-let holidaySource = { live: false, years: [], fetchedAt: null, error: null }
 
 const p2 = n => String(n).padStart(2, '0')
 
@@ -158,30 +157,6 @@ function fmtDuration(ms) {
   const m = Math.floor(s / 60)
   s -= m * 60
   return (d > 0 ? d + 'd ' : '') + p2(h) + ':' + p2(m) + ':' + p2(s)
-}
-
-// "3h ago" / "2d ago" for the age of the holiday data.
-function agoText(ts, now) {
-  if (!(now - ts >= 60000)) return 'just now'
-  const h = Math.floor((now - ts) / 3600000)
-  return h < 48 ? h + 'h ago' : Math.floor(h / 24) + 'd ago'
-}
-
-// Provenance line under the panel's holiday rows: live mirror, bundled fallback
-// or a failed refresh — never a guess.
-function holidaySourceText(now) {
-  if (holidaySource.live) {
-    return (
-      'gov.cn via holiday-cn · live ' +
-      holidaySource.years.join('+') +
-      ' · updated ' +
-      agoText(holidaySource.fetchedAt, now)
-    )
-  }
-  const years = [...new Set([...cnHolidays].map(iso => iso.slice(0, 4)))].sort().join('+')
-  return (
-    'gov.cn notice ' + years + ' (bundled)' + (holidaySource.error ? ' · live refresh failed' : ' · refreshing…')
-  )
 }
 
 // The one-line status text used by the chip's hover hint and the ⌘K toast.
@@ -376,11 +351,7 @@ function DetailPanel({ now, t }) {
                 value: utcHM(w[0][0]) + '–' + utcHM(w[0][1]) + ' · ' + utcHM(w[1][0]) + '–' + utcHM(w[1][1])
               }),
               jsx(Row, { label: t('weekend'), value: t('alwaysOff') }),
-              jsx(Row, { label: t('holidays'), value: holidaySummary(n => t('days', n)) + ' — ' + t('alwaysOff') }),
-              jsx('div', {
-                className: 'mt-1 text-[0.6875rem] leading-snug text-(--ui-text-quaternary)',
-                children: t('source', holidaySourceText(now.getTime()))
-              })
+              jsx(Row, { label: t('holidays'), value: holidaySummary(n => t('days', n)) + ' — ' + t('alwaysOff') })
             ]
           })
         ]
@@ -460,11 +431,10 @@ async function fetchHolidayYear(year) {
   return []
 }
 
-function applyHolidays(days, meta) {
+function applyHolidays(days) {
   if (!days.length) return
 
   cnHolidays = new Set(days)
-  holidaySource = meta
 }
 
 /**
@@ -477,7 +447,7 @@ async function refreshHolidays(ctx) {
     const cache = ctx.storage.get(HOLIDAY_CACHE_KEY, null)
 
     if (cache && Array.isArray(cache.days) && Date.now() - cache.fetchedAt < HOLIDAY_REFRESH_MS) {
-      applyHolidays(cache.days, { live: true, years: cache.years, fetchedAt: cache.fetchedAt, error: null })
+      applyHolidays(cache.days)
       return true
     }
 
@@ -499,15 +469,13 @@ async function refreshHolidays(ctx) {
     // Live data is authoritative per year; the bundled list fills the gaps.
     const covered = new Set(years.map(String))
     const kept = [...CN_HOLIDAYS_UTC].filter(iso => !covered.has(iso.slice(0, 4)))
-    const meta = { live: true, years: years.map(String), fetchedAt: Date.now(), error: null }
 
-    applyHolidays([...kept, ...days], meta)
-    ctx.storage.set(HOLIDAY_CACHE_KEY, { days, years: meta.years, fetchedAt: meta.fetchedAt })
-    console.log(`[${ID}] holidays: live ${meta.years.join('+')} (${days.length} weekday holidays)`)
+    applyHolidays([...kept, ...days])
+    ctx.storage.set(HOLIDAY_CACHE_KEY, { days, years: years.map(String), fetchedAt: Date.now() })
+    console.log(`[${ID}] holidays: live ${years.join('+')} (${days.length} weekday holidays)`)
 
     return true
   } catch (error) {
-    holidaySource = { ...holidaySource, error: String(error) }
     console.warn(`[${ID}] holidays: live refresh failed (${String(error)}) — keeping bundled/cached list`)
 
     return false
@@ -543,8 +511,7 @@ export default {
         holidays: 'Chinese holidays',
         alwaysOff: 'off-peak all day',
         days: n => n + ' days',
-        statusCommand: 'DeepSeek Peak: status',
-        source: info => 'api-docs.deepseek.com · holidays: ' + info
+        statusCommand: 'DeepSeek Peak: status'
       }
     })
 

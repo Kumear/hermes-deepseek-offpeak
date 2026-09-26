@@ -45,9 +45,8 @@ every November), so instead of hardcoding it the plugin:
 - refreshes it from a community mirror of that notice
   ([`NateScarlet/holiday-cn`](https://github.com/NateScarlet/holiday-cn), served via jsDelivr) — one
   JSON GET per year, at most once a week, cached locally,
-- keeps the bundled dates whenever the network or the mirror fails, and
-- names its source in the panel footer: `live 2026 · updated 3h ago` vs.
-  `notice 2026 (bundled) · live refresh failed`.
+- keeps the bundled dates whenever the network or the mirror fails — the only trace is a console
+  warning, the chip and the detail popover never change behaviour.
 
 Nothing is sent anywhere — the refresh is an anonymous GET to a public CDN. As soon as the State
 Council publishes the next year's arrangement, it appears automatically: no plugin update needed.
